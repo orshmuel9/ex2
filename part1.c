@@ -28,9 +28,9 @@ int main(int argc ,char *argv[]) {
                 fprintf(file, "%s\n", argv[2]);
             }
             fclose(file);
-            sleep(1);
             exit (0);
         }else{
+            sleep(1);
             for(int i = 0; i < atoi(argv[4]); i++){
                 //printf("%s\n", argv[2]);
                 fprintf(file, "%s\n", argv[3]);
