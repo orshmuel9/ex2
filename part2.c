@@ -20,6 +20,7 @@ int main(int argc, char *argv[]) {
     }
 
     const char *lockfile = "lockfile.lock";
+    unlink(lockfile);
     int num_times = atoi(argv[argc - 1]);
     int num_forks = argc - 3;
 
