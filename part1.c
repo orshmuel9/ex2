@@ -11,15 +11,19 @@ int main(int argc ,char *argv[]) {
         return 1;
     }
     FILE *file = fopen("output.txt", "w");
+    if (file == NULL) {
+        perror("fopen");
+        return 1;
+    }
     int pid = fork();
     if (pid < 0) {
-        fprintf(stderr, "Fork Failed");
+        perror("fork failed");
         return 1;
     }
     if(pid == 0){
         int pid2 = fork();
         if (pid2 < 0) {
-            fprintf(stderr, "Fork Failed");
+            perror("fork failed");
             return 1;
         }
         if(pid2 == 0){
