@@ -72,6 +72,7 @@ int main(int argc, char *argv[]) {
             }
             exit(0);
         }
+        sleep(2);
     }
 
     // Parent process
