@@ -9,6 +9,7 @@
 
 #define BUFFER_SIZE 4096
 
+// Function to open a buffered file
 buffered_file_t *buffered_open(const char *pathname, int flags, ...) {
     buffered_file_t *bf = malloc(sizeof(buffered_file_t));
     if (!bf) {
@@ -51,7 +52,7 @@ buffered_file_t *buffered_open(const char *pathname, int flags, ...) {
         return NULL;
     }
 
-     if (flags & O_TRUNC) {
+    if (flags & O_TRUNC) {
         if (ftruncate(bf->fd, 0) == -1) {
             perror("ftruncate");
             close(bf->fd);
@@ -64,6 +65,7 @@ buffered_file_t *buffered_open(const char *pathname, int flags, ...) {
     return bf;
 }
 
+// Function to write to the buffered file
 ssize_t buffered_write(buffered_file_t *bf, const void *buf, size_t count) {
     size_t remaining_space = bf->buffer_size - bf->buffer_pos;
 
@@ -86,34 +88,54 @@ ssize_t buffered_write(buffered_file_t *bf, const void *buf, size_t count) {
     return 1;
 }
 
+// Function to read from the buffered file
 ssize_t buffered_read(buffered_file_t *bf, void *buf, size_t count) {
     size_t bytes_to_read = count;
     size_t bytes_read = 0;
     char *buffer = buf;
 
-    while (bytes_to_read > 0) {
-        if (bf->buffer_pos == bf->buffer_size) {
+    // First read from the buffer if there is any data left
+    if (bf->buffer_pos > 0) {
+        size_t bytes_available = bf->buffer_pos < bytes_to_read ? bf->buffer_pos : bytes_to_read;
+        memcpy(buffer, bf->buffer, bytes_available);
+        bytes_read += bytes_available;
+        bytes_to_read -= bytes_available;
+        buffer += bytes_available;
+    }
+
+    // If there is still data to read, read from the file
+    if (bytes_to_read > 0) {
+        // Create a temporary buffer to store the current content
+        char temp_buffer[BUFFER_SIZE];
+        size_t temp_buffer_pos = bf->buffer_pos;
+        memcpy(temp_buffer, bf->buffer, bf->buffer_pos);
+
+        // Read from the file
+        while (bytes_to_read > 0) {
             ssize_t result = read(bf->fd, bf->buffer, bf->buffer_size);
             if (result == -1) {
                 perror("read");
-                return -1; 
-            } else if (result == 0) {
+                return -1;
+            } else if (result == 0) { // End of file
                 break;
             }
-            bf->buffer_size = result;
-            bf->buffer_pos = 0;
+            size_t bytes_available = result < bytes_to_read ? result : bytes_to_read;
+            memcpy(buffer, bf->buffer, bytes_available);
+            bytes_read += bytes_available;
+            bytes_to_read -= bytes_available;
+            buffer += bytes_available;
         }
-        size_t bytes_available = bf->buffer_size - bf->buffer_pos;
-        size_t bytes_to_copy = bytes_to_read < bytes_available ? bytes_to_read : bytes_available;
-        memcpy(buffer + bytes_read, bf->buffer + bf->buffer_pos, bytes_to_copy);
-        bf->buffer_pos += bytes_to_copy;
-        bytes_read += bytes_to_copy;
-        bytes_to_read -= bytes_to_copy;
+
+        // Restore the buffer content to its original state
+        memcpy(bf->buffer, temp_buffer, temp_buffer_pos);
+        bf->buffer_pos = temp_buffer_pos;
     }
 
     return bytes_read;
 }
 
+
+// Function to flush the buffered file
 int buffered_flush(buffered_file_t *bf) {
     if (bf->buffer_pos > 0) {
         if (bf->preappend) {
@@ -164,8 +186,7 @@ int buffered_flush(buffered_file_t *bf) {
             }
 
             free(temp_buffer);
-        }
-        else if (bf->flags & O_APPEND) {
+        } else if (bf->flags & O_APPEND) {
             // Ensure the file descriptor is at the end of the file before writing
             if (lseek(bf->fd, 0, SEEK_END) == -1) {
                 perror("lseek end");
@@ -177,27 +198,21 @@ int buffered_flush(buffered_file_t *bf) {
                 perror("write buffer");
                 return -1; 
             }
-        }
-         else {    
+        } else {    
             ssize_t written = write(bf->fd, bf->buffer, bf->buffer_pos);
             if (written == -1) {
                 perror("write buffer");
                 return -1; 
             }
-
-            // // Truncate the file to remove any remaining old content
-            // if (ftruncate(bf->fd, bf->buffer_pos) == -1) {
-            //     perror("ftruncate");
-            //     return -1;
-            // }
         }
         bf->buffer_pos = 0; 
     }
     return 1;
 }
 
+// Function to close the buffered file
 int buffered_close(buffered_file_t *bf) {
-    if (bf->flags & (O_WRONLY | O_RDWR)) {
+    if (bf->flags & (O_WRONLY | O_RDWR)) { // Only flush if opened in write mode
         if (buffered_flush(bf) == -1) {
             return -1;
         }
@@ -212,7 +227,7 @@ int buffered_close(buffered_file_t *bf) {
 }
 
 int main() {
-    buffered_file_t *bf = buffered_open("example1.txt", O_RDWR | O_CREAT | O_TRUNC,  0644);
+    buffered_file_t *bf = buffered_open("example1.txt", O_RDWR | O_CREAT | O_TRUNC, 0644);
     if (!bf) {
         perror("buffered_open");
         return 1;
@@ -237,18 +252,47 @@ int main() {
         buffered_close(bf);
         return 1;
     }
-    
-    if (buffered_flush(bf) == -1) {
-        perror("buffered_flush");
+
+    // if (buffered_flush(bf) == -1) {
+    //     perror("buffered_flush");
+    //     buffered_close(bf);
+    //     return 1;
+    // }
+
+    // Move the file descriptor to the beginning of the file before reading
+    // if (lseek(bf->fd, 0, SEEK_SET) == -1) {
+    //     perror("lseek set");
+    //     buffered_close(bf);
+    //     return 1;
+    // }
+
+    const char *text4 = "This is a test number 3 .\n";
+    if (buffered_write(bf, text4, strlen(text4)) == -1) {
+        perror("buffered_write");
         buffered_close(bf);
         return 1;
     }
+
+
+    
+
+    char buffer2[1024];
+    ssize_t read_bytes2 = buffered_read(bf, buffer2, sizeof(buffer2) - 1);
+    if (read_bytes2 == -1) {
+        perror("buffered_read");
+        buffered_close(bf);
+        return 1;
+    }
+    buffer2[read_bytes2] = '\0';
+    printf("Read: %s\n", buffer2);
 
     if (buffered_close(bf) == -1) {
         perror("buffered_close");
         return 1;
     }
+    
 
+    // Additional read from a new file descriptor
     char buffer[1024];
     buffered_file_t *bf2 = buffered_open("example1.txt", O_RDONLY);
     if (!bf2) {
@@ -256,23 +300,20 @@ int main() {
         return 1;
     }
 
-    ssize_t read_bytes = buffered_read(bf2, buffer, sizeof(buffer));
+    ssize_t read_bytes = buffered_read(bf2, buffer, sizeof(buffer) - 1);
     if (read_bytes == -1) {
         perror("buffered_read");
         buffered_close(bf2);
         return 1;
     }
-
     buffer[read_bytes] = '\0';
-    printf("Read: %s", buffer);
+    printf("Read again: %s", buffer);
+
 
     if (buffered_close(bf2) == -1) {
         perror("buffered_close");
         return 1;
     }
-    
-
-    
 
     return 0;
 }
