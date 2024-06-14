@@ -197,8 +197,10 @@ int buffered_flush(buffered_file_t *bf) {
 }
 
 int buffered_close(buffered_file_t *bf) {
-    if (buffered_flush(bf) == -1) {
-        return -1;
+    if (bf->flags & (O_WRONLY | O_RDWR)) {
+        if (buffered_flush(bf) == -1) {
+            return -1;
+        }
     }
     int ret = close(bf->fd);
     if (ret == -1) {
@@ -229,10 +231,46 @@ int main() {
         return 1;
     }
 
+    const char *text3 = "This is a test number 2 .\n";
+    if (buffered_write(bf, text3, strlen(text3)) == -1) {
+        perror("buffered_write");
+        buffered_close(bf);
+        return 1;
+    }
+    
+    if (buffered_flush(bf) == -1) {
+        perror("buffered_flush");
+        buffered_close(bf);
+        return 1;
+    }
+
     if (buffered_close(bf) == -1) {
         perror("buffered_close");
         return 1;
     }
+
+    char buffer[1024];
+    buffered_file_t *bf2 = buffered_open("example1.txt", O_RDONLY);
+    if (!bf2) {
+        perror("buffered_open");
+        return 1;
+    }
+
+    ssize_t read_bytes = buffered_read(bf2, buffer, sizeof(buffer));
+    if (read_bytes == -1) {
+        perror("buffered_read");
+        buffered_close(bf2);
+        return 1;
+    }
+
+    buffer[read_bytes] = '\0';
+    printf("Read: %s", buffer);
+
+    if (buffered_close(bf2) == -1) {
+        perror("buffered_close");
+        return 1;
+    }
+    
 
     
 
