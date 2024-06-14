@@ -2,6 +2,7 @@
     "files.associations": {
         "stdlib.h": "c",
         "types.h": "c",
-        "unistd.h": "c"
+        "unistd.h": "c",
+        "buffered_open.h": "c"
     }
 }
