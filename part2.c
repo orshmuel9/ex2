@@ -8,7 +8,7 @@
 
 void write_message(const char *message, int count) {
     for (int i = 0; i < count; i++) {
-        printf("%s", message);
+        printf("%s\n", message);
         usleep((rand() % 100) * 1000); // Random delay between 0 and 99 milliseconds
     }
 }
@@ -43,13 +43,13 @@ int main(int argc, char *argv[]) {
             const char *message = argv[real_order[i] + 1];
 
             // Remove the literal \n from the message
-            char clean_message[256];
-            strncpy(clean_message, message, sizeof(clean_message) - 1);
-            clean_message[sizeof(clean_message) - 1] = '\0';
-            char *newline_pos = strstr(clean_message, "\\n");
-            if (newline_pos) {
-                *newline_pos = '\0'; // Remove the \n
-            }
+            // char clean_message[256];
+            // strncpy(clean_message, message, sizeof(clean_message) - 1);
+            // clean_message[sizeof(clean_message) - 1] = '\0';
+            // char *newline_pos = strstr(clean_message, "\\n");
+            // if (newline_pos) {
+            //     *newline_pos = '\0'; // Remove the \n
+            // }
 
             for (int j = 0; j < num_times; j++) {
                 // Acquire lock
@@ -63,7 +63,7 @@ int main(int argc, char *argv[]) {
                 }
 
                 // Write to stdout
-                write_message(clean_message, 1);  
+                write_message(message, 1);  
                 printf("\n"); 
                 fflush(stdout);  
 
