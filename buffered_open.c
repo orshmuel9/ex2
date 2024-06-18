@@ -8,7 +8,7 @@
 #include <unistd.h>
 
 #define BUFFER_SIZE 4096
-
+int counterPreappend = 0;
 // Function to open a buffered file
 buffered_file_t *buffered_open(const char *pathname, int flags, ...) {
     buffered_file_t *bf = malloc(sizeof(buffered_file_t));
@@ -84,7 +84,11 @@ ssize_t buffered_write(buffered_file_t *bf, const void *buf, size_t count) {
         count -= bytes_to_write; 
         remaining_space -= bytes_to_write; 
     }
-
+    if(remaining_space == 0) {
+        if (buffered_flush(bf) == -1) {
+            return -1; 
+        }
+    }
     return 1;
 }
 
@@ -138,7 +142,7 @@ ssize_t buffered_read(buffered_file_t *bf, void *buf, size_t count) {
 // Function to flush the buffered file
 int buffered_flush(buffered_file_t *bf) {
     if (bf->buffer_pos > 0) {
-        if (bf->preappend) {
+        if (bf->preappend && counterPreappend == 0) {
             // Handle O_PREAPPEND: Read existing file content
             off_t current_offset = lseek(bf->fd, 0, SEEK_END);
             if (current_offset == -1) {
@@ -151,7 +155,7 @@ int buffered_flush(buffered_file_t *bf) {
                 perror("malloc temp buffer");
                 return -1; 
             }
-
+            
             if (lseek(bf->fd, 0, SEEK_SET) == -1) {
                 free(temp_buffer);
                 perror("lseek set");
@@ -178,14 +182,84 @@ int buffered_flush(buffered_file_t *bf) {
                 return -1; 
             }
 
-            written = write(bf->fd, temp_buffer, read_bytes);
+            off_t offset = lseek(bf->fd, 0, SEEK_CUR);
+
+            ssize_t write2 = write(bf->fd, temp_buffer, read_bytes);
+            if (write2 == -1) {
+                free(temp_buffer);
+                perror("write temp buffer");
+                return -1; 
+            }
+
+            if (lseek(bf->fd, offset, SEEK_SET) == -1) {
+                perror("lseek set");
+                return -1;
+            }
+
+            free(temp_buffer);
+            counterPreappend++;
+        } else if (bf->preappend && counterPreappend > 0) {
+            // Save current position
+            off_t saved_offset = lseek(bf->fd, 0, SEEK_CUR);
+
+            // Move to the end to find out the size of the remaining content
+            off_t current_offset = lseek(bf->fd, 0, SEEK_END);
+            if (current_offset == -1) {
+                perror("lseek end");
+                return -1; 
+            }
+
+            // Calculate the size of remaining content
+            off_t remaining_size = current_offset - saved_offset;
+            char *temp_buffer = (char *)malloc(remaining_size);
+            if (!temp_buffer) {
+                perror("malloc temp buffer");
+                return -1; 
+            }
+
+            // Read the remaining content into the temp buffer
+            if (lseek(bf->fd, saved_offset, SEEK_SET) == -1) {
+                free(temp_buffer);
+                perror("lseek set");
+                return -1; 
+            }
+
+            ssize_t read_bytes = read(bf->fd, temp_buffer, remaining_size);
+            if (read_bytes == -1) {
+                free(temp_buffer);
+                perror("read");
+                return -1; 
+            }
+
+            // Move back to the saved position and write the buffer
+            if (lseek(bf->fd, saved_offset, SEEK_SET) == -1) {
+                free(temp_buffer);
+                perror("lseek set");
+                return -1; 
+            }
+
+            ssize_t written = write(bf->fd, bf->buffer, bf->buffer_pos);
             if (written == -1) {
+                free(temp_buffer);
+                perror("write buffer");
+                return -1; 
+            }
+
+            // Write the remaining content back
+            ssize_t write2 = write(bf->fd, temp_buffer, read_bytes);
+            if (write2 == -1) {
                 free(temp_buffer);
                 perror("write temp buffer");
                 return -1; 
             }
 
             free(temp_buffer);
+
+            // Move the file offset to just after the written buffer, before the old content
+            if (lseek(bf->fd, saved_offset + written, SEEK_SET) == -1) {
+                perror("lseek set");
+                return -1;
+            }
         } else if (bf->flags & O_APPEND) {
             // Ensure the file descriptor is at the end of the file before writing
             if (lseek(bf->fd, 0, SEEK_END) == -1) {
@@ -227,7 +301,7 @@ int buffered_close(buffered_file_t *bf) {
 }
 
 int main() {
-    buffered_file_t *bf = buffered_open("example1.txt", O_RDWR | O_CREAT | O_TRUNC, 0644);
+    buffered_file_t *bf = buffered_open("example.txt", O_RDWR | O_CREAT | O_PREAPPEND, 0644);
     if (!bf) {
         perror("buffered_open");
         return 1;
@@ -253,11 +327,11 @@ int main() {
         return 1;
     }
 
-    // if (buffered_flush(bf) == -1) {
-    //     perror("buffered_flush");
-    //     buffered_close(bf);
-    //     return 1;
-    // }
+    if (buffered_flush(bf) == -1) {
+        perror("buffered_flush");
+        buffered_close(bf);
+        return 1;
+    }
 
     // Move the file descriptor to the beginning of the file before reading
     // if (lseek(bf->fd, 0, SEEK_SET) == -1) {
@@ -273,18 +347,31 @@ int main() {
         return 1;
     }
 
-
-    
-
-    char buffer2[1024];
-    ssize_t read_bytes2 = buffered_read(bf, buffer2, sizeof(buffer2) - 1);
-    if (read_bytes2 == -1) {
-        perror("buffered_read");
+    if(buffered_flush(bf) == -1) {
+        perror("buffered_flush");
         buffered_close(bf);
         return 1;
     }
-    buffer2[read_bytes2] = '\0';
-    printf("Read: %s\n", buffer2);
+
+    const char *text5 = "This is a test number 4 .\n";
+    if (buffered_write(bf, text5, strlen(text5)) == -1) {
+        perror("buffered_write");
+        buffered_close(bf);
+        return 1;
+    }
+
+
+    
+
+    // char buffer2[1024];
+    // ssize_t read_bytes2 = buffered_read(bf, buffer2, sizeof(buffer2) - 1);
+    // if (read_bytes2 == -1) {
+    //     perror("buffered_read");
+    //     buffered_close(bf);
+    //     return 1;
+    // }
+    // buffer2[read_bytes2] = '\0';
+    // printf("Read: %s\n", buffer2);
 
     if (buffered_close(bf) == -1) {
         perror("buffered_close");
