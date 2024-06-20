@@ -9,12 +9,20 @@
 
 // Structure to hold the buffer and original flags
 typedef struct {
-    int fd;
-    char *buffer;
-    size_t buffer_size;
-    size_t buffer_pos;
-    int flags;
-    int preappend; // flag to remember if O_PREAPPEND was used
+    int fd;                     // File descriptor for the opened file
+
+    char *read_buffer;          // Buffer for reading operations, holds data read from the file
+    char *write_buffer;         // Buffer for writing operations, holds data to be written to the file
+
+    size_t read_buffer_size;    // Size of the read buffer, indicating how much data it can hold
+    size_t write_buffer_size;   // Size of the write buffer, indicating how much data it can hold
+
+    size_t read_buffer_pos;     // Current position in the read buffer, indicating the next byte to be read
+    size_t write_buffer_pos;    // Current position in the write buffer, indicating the next byte to be written
+
+    int flags;                  // File flags used to control file access modes and options (like O_RDONLY, O_WRONLY)
+
+    int preappend;              // Flag to remember if the O_PREAPPEND flag was used, indicating special handling for writes
 } buffered_file_t;
 
 // Function to wrap the original open function
