@@ -19,41 +19,42 @@ int main(int argc ,char *argv[]) {
         perror("fopen");
         return 1;
     }
-    int pid = fork();
+    pid_t pid,pid2;
+    pid = fork();
     if (pid < 0) {
         perror("fork failed");
         return 1;
     }
-    if(pid == 0){
-        for(int i = 0; i < count; i++){
-            fprintf(file, "%s\n", child1_message);
-        }
-        fclose(file);
-        exit (0);
-    }else{
-        wait(NULL);
-        int pid2 = fork();
+    if (pid > 0){
+        pid2 = fork();
         if (pid2 < 0) {
             perror("fork failed");
             return 1;
         }
-        if(pid2 == 0){
-            sleep(1);
-            for(int i = 0; i < count; i++){
-                fprintf(file, "%s\n", child2_message);
-            }
-            fclose(file);
-            exit (0);
+    }
+    if (pid == 0){
+        for(int i = 0; i < count; i++){
+            fprintf(file, "%s\n", child1_message);
         }
-        else{
-            wait(NULL);
-            sleep(1);
-            for(int i = 0; i < count; i++){
-                fprintf(file, "%s\n", parent_message);
-            }
-            fclose(file);
-            exit (0);
+        fclose(file);
+        exit(0);
+    }
+    sleep(10);
+    if (pid2 == 0){
+        for(int i = 0; i < count; i++){
+            fprintf(file, "%s\n", child2_message);
         }
+        fclose(file);
+        exit(0);
+    }
+    else{
+        wait(NULL);
+        wait(NULL);
+        for(int i = 0; i < count; i++){
+            fprintf(file, "%s\n", parent_message);
+        }
+        fclose(file);
+        exit(0);
     }
     fclose(file);
     return 0;
