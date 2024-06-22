@@ -345,6 +345,19 @@ int main() {
         return 1;
     }
 
+    const char *text = "Hello, World TRUNCs!\n";
+    if (buffered_write(bf, text, strlen(text)) == -1) {
+        perror("buffered_write");
+        buffered_close(bf);
+        return 1;
+    }
+
+    if(buffered_flush(bf) == -1) {
+        perror("buffered_flush");
+        buffered_close(bf);
+        return 1;
+    }
+
     char buffer[3];
     ssize_t read_bytes = buffered_read(bf, buffer, sizeof(buffer));
     if (read_bytes == -1) {
@@ -379,12 +392,6 @@ int main() {
     printf("Buffer Pos %ld\n" , bf->read_buffer_pos);
     printf("Read from buffer3: %s\n", bf->read_buffer);
 
-    // const char *text = "Hello, World TRUNCs!\n";
-    // if (buffered_write(bf, text, strlen(text)) == -1) {
-    //     perror("buffered_write");
-    //     buffered_close(bf);
-    //     return 1;
-    // }
     // const char *text2 = "This is a test.\n";
     // if (buffered_write(bf, text2, strlen(text2)) == -1) {
     //     perror("buffered_write");

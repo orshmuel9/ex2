@@ -3,6 +3,9 @@
         "stdlib.h": "c",
         "types.h": "c",
         "unistd.h": "c",
-        "buffered_open.h": "c"
+        "buffered_open.h": "c",
+        "stat.h": "c",
+        "string.h": "c",
+        "stdio.h": "c"
     }
 }

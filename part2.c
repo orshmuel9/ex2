@@ -15,7 +15,7 @@ void write_message(const char *message, int count) {
 
 int main(int argc, char *argv[]) {
     if (argc < 4) {
-        fprintf(stderr, "Usage: %s <message1> <message2> ... <order> <count>\n", argv[0]);
+        fprintf(stderr, "Usage: %s <message1> <message2> ... <count>\n", argv[0]);
         return 1;
     }
 
