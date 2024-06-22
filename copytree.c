@@ -31,7 +31,6 @@ void copy_file(const char *src, const char *dest, int copy_symlinks, int copy_pe
                 exit(EXIT_FAILURE);
             }
             link_target[len] = '\0';
-            printf("Creating symlink %s -> %s\n", dest, link_target);
             if (symlink(link_target, dest) == -1) {
                 perror("symlink failed");
                 exit(EXIT_FAILURE);
@@ -113,7 +112,6 @@ void create_directory(const char *path, mode_t mode) {
             *p = '\0';
             if (mkdir(tmp, mode) == -1 && errno != EEXIST) {
                 perror("mkdir failed");
-                fprintf(stderr, "Failed to create directory: %s\n", tmp);
                 exit(EXIT_FAILURE);
             }
             *p = '/';
@@ -121,7 +119,6 @@ void create_directory(const char *path, mode_t mode) {
     }
     if (mkdir(tmp, mode) == -1 && errno != EEXIST) {
         perror("mkdir failed");
-        fprintf(stderr, "Failed to create directory: %s\n", tmp);
         exit(EXIT_FAILURE);
     }
 }
