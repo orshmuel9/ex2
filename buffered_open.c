@@ -101,36 +101,71 @@ ssize_t buffered_write(buffered_file_t *bf, const void *buf, size_t count) {
             return -1; 
         }
     }
-    return 1;
+    return count;
 }
 
 // Function to read from the buffered file
 ssize_t buffered_read(buffered_file_t *bf, void *buf, size_t count) {
     // flush the write buffer before reading
-    if(bf->write_buffer_pos > 0) {
+    if (bf->write_buffer_pos > 0) {
         if (buffered_flush(bf) == -1) {
             return -1; 
         }
     }
 
-    ssize_t read_bytes = read(bf->fd, buf, count);
-    if (read_bytes == -1) {
-        perror("read");
-        return -1;
-    }
+    // If count is larger than the remaining space in the buffer
+    if (count > bf->read_buffer_size - bf->read_buffer_pos) {
+        size_t remaining = count;
+        size_t total_read_bytes = 0;
+        char *buffer = buf;
 
-    memcpy(bf->read_buffer + bf->read_buffer_pos, buf, read_bytes);
-    //memcpy(bf->read_buffer, buf, read_bytes); 
-    bf->read_buffer_pos += read_bytes;
+        while (remaining > 0) {
+            ssize_t read_bytes = read(bf->fd, buffer, remaining);
+            if (read_bytes == -1) {
+                perror("read");
+                return -1;
+            } else if (read_bytes == 0) { // End of file
+                break;
+            }
+            size_t buffer_space = bf->read_buffer_size - bf->read_buffer_pos;
+            size_t bytes_to_copy = (read_bytes < buffer_space) ? read_bytes : buffer_space;
+            memcpy(bf->read_buffer + bf->read_buffer_pos, buffer, bytes_to_copy);
+            bf->read_buffer_pos += bytes_to_copy;
+            if (bf->read_buffer_pos >= bf->read_buffer_size) {
+                bf->read_buffer_pos = 0;
+            }
+            buffer += read_bytes;
+            total_read_bytes += read_bytes;
+            remaining -= read_bytes;
+        }
 
-    //Add null-terminator
-    if (read_bytes < count) {
-        ((char*)buf)[read_bytes] = '\0';
+        // Add null-terminator
+        if (total_read_bytes < count) {
+            ((char*)buf)[total_read_bytes] = '\0';
+        } else {
+            ((char*)buf)[count] = '\0';
+        }
+        return total_read_bytes;
+
     } else {
-        ((char*)buf)[count] = '\0';
+        ssize_t read_bytes = read(bf->fd, buf, count);
+        if (read_bytes == -1) {
+            perror("read");
+            return -1;
+        }
+        memcpy(bf->read_buffer + bf->read_buffer_pos, buf, read_bytes);
+        bf->read_buffer_pos += read_bytes;
+        if (bf->read_buffer_pos >= bf->read_buffer_size) {
+                bf->read_buffer_pos = 0;
+        }
+        // Add null-terminator
+        if (read_bytes < count) {
+            ((char*)buf)[read_bytes] = '\0';
+        } else {
+            ((char*)buf)[count] = '\0';
+        }
+        return read_bytes;
     }
-
-    return read_bytes;
 }
 
 
@@ -304,52 +339,52 @@ int buffered_close(buffered_file_t *bf) {
 //         return 1;
 //     }
 
-//     const char *text = "Hello, World TRUNCs!\n";
-//     if (buffered_write(bf, text, strlen(text)) == -1) {
-//         perror("buffered_write");
+// //     const char *text = "Hello, World TRUNCs!\n";
+// //     if (buffered_write(bf, text, strlen(text)) == -1) {
+// //         perror("buffered_write");
+// //         buffered_close(bf);
+// //         return 1;
+// //     }
+
+// //     if(buffered_flush(bf) == -1) {
+// //         perror("buffered_flush");
+// //         buffered_close(bf);
+// //         return 1;
+// //     }
+
+//     char buffer[3];
+//     ssize_t read_bytes = buffered_read(bf, buffer, sizeof(buffer));
+//     if (read_bytes == -1) {
+//         perror("buffered_read");
 //         buffered_close(bf);
 //         return 1;
 //     }
+//     //buffer[read_bytes] = '\0';
+//     printf("Read: %s\n", buffer);
+//     printf("Read from buffer: %s\n", bf->read_buffer);
 
-//     if(buffered_flush(bf) == -1) {
-//         perror("buffered_flush");
+//     char buffer2[10];
+//     ssize_t read_bytes2 = buffered_read(bf, buffer2, sizeof(buffer2));
+//     if (read_bytes2 == -1) {
+//         perror("buffered_read");
 //         buffered_close(bf);
 //         return 1;
 //     }
+//     //buffer2[read_bytes2] = '\0';
+//     printf("Read2: %s\n", buffer2);
+//     printf("Read from buffer2: %s\n", bf->read_buffer);
 
-//     // char buffer[3];
-//     // ssize_t read_bytes = buffered_read(bf, buffer, sizeof(buffer));
-//     // if (read_bytes == -1) {
-//     //     perror("buffered_read");
-//     //     buffered_close(bf);
-//     //     return 1;
-//     // }
-//     // //buffer[read_bytes] = '\0';
-//     // printf("Read: %s\n", buffer);
-//     // printf("Read from buffer: %s\n", bf->read_buffer);
-
-//     // char buffer2[10];
-//     // ssize_t read_bytes2 = buffered_read(bf, buffer2, sizeof(buffer2));
-//     // if (read_bytes2 == -1) {
-//     //     perror("buffered_read");
-//     //     buffered_close(bf);
-//     //     return 1;
-//     // }
-//     // //buffer2[read_bytes2] = '\0';
-//     // printf("Read2: %s\n", buffer2);
-//     // printf("Read from buffer2: %s\n", bf->read_buffer);
-
-//     // char buffer3[1000];
-//     // ssize_t read_bytes3 = buffered_read(bf, buffer3, sizeof(buffer3));
-//     // if (read_bytes3 == -1) {
-//     //     perror("buffered_read");
-//     //     buffered_close(bf);
-//     //     return 1;
-//     // }
-//     // //buffer3[read_bytes3] = '\0';
-//     // printf("Read3: %s\n", buffer3);
-//     // printf("Buffer Pos %ld\n" , bf->read_buffer_pos);
-//     // printf("Read from buffer3: %s\n", bf->read_buffer);
+//     char buffer3[1000];
+//     ssize_t read_bytes3 = buffered_read(bf, buffer3, sizeof(buffer3));
+//     if (read_bytes3 == -1) {
+//         perror("buffered_read");
+//         buffered_close(bf);
+//         return 1;
+//     }
+//     //buffer3[read_bytes3] = '\0';
+//     printf("Read3: %s\n", buffer3);
+//     printf("Buffer Pos %ld\n" , bf->read_buffer_pos);
+//     printf("Read from buffer3: %s\n", bf->read_buffer);
 
 //     const char *text2 = "This is a test.\n";
 //     if (buffered_write(bf, text2, strlen(text2)) == -1) {
@@ -391,10 +426,10 @@ int buffered_close(buffered_file_t *bf) {
 //         return 1;
 //     }
 
-//         if (buffered_close(bf) == -1) {
-//         perror("buffered_close");
-//         return 1;
-//     }
+    //     if (buffered_close(bf) == -1) {
+    //     perror("buffered_close");
+    //     return 1;
+    // }
 
 
 //     // Move the file descriptor to the beginning of the file before reading

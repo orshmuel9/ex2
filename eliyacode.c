@@ -1,4 +1,3 @@
-// 318771052 Eliya Rabia
 #include "buffered_open.h"
 #include <stdlib.h>
 #include <string.h>
@@ -6,9 +5,6 @@
 #include <stdarg.h>
 #include <stdio.h>
 #include <unistd.h>
-
-int PREAPPEND_WAS_ON = 0;
-int read_chars = 0;
 
 // Function to open a file with buffered I/O
 buffered_file_t *buffered_open(const char *pathname, int flags, ...) {
@@ -47,7 +43,12 @@ buffered_file_t *buffered_open(const char *pathname, int flags, ...) {
     }
 
     // Check if O_PREAPPEND flag is set
-    bf->preappend = flags & O_PREAPPEND;
+    if(flags & O_PREAPPEND){
+        bf->preappend = 1;
+    } else {
+        bf->preappend = 0;
+    }
+
     // Remove O_PREAPPEND flag before calling open
     bf->flags = flags & ~O_PREAPPEND;
    
@@ -104,42 +105,14 @@ ssize_t buffered_write(buffered_file_t *bf, const void *buf, size_t count) {
 ssize_t buffered_read(buffered_file_t *bf, void *buf, size_t count) {
     char *ptr = buf;
     size_t remaining = count;
-    size_t readable_size = read_chars - bf->read_buffer_pos;
-    size_t to_copy = remaining < readable_size ? remaining : readable_size;
+    size_t fd_size;
+    size_t to_copy;
 
     // Flush the write buffer before reading
     if (buffered_flush(bf) == -1) {
         return -1;
     }
-
-
-    // First read from the read_buffer if there is any data in it
-    if (readable_size > 0) {
-
-        // get the current position of fd
-        size_t current_position =lseek(bf->fd, 0, SEEK_CUR);
-        if (current_position == -1) {
-            perror("Error getting current position in file");
-            return -1;
-        }
-        memcpy(ptr, bf->read_buffer + bf->read_buffer_pos, to_copy);
-
-        // Null-terminate the buffer
-        ptr[to_copy] = '\0';
-        ptr += to_copy;
-        remaining -= to_copy;
-        bf->read_buffer_pos += to_copy;
-
-        // set the file position to the current position after what i read
-        current_position += to_copy;
-        if (lseek(bf->fd, current_position, SEEK_SET) == -1) {
-            perror("Error seeking to new position after reading");
-            return -1;
-        }
-    } else { // in case of there is nothing to read
-        // Null-terminate the buffer
-        ptr[0] = '\0';
-    }
+    ptr[0] = '\0';
 
     // Now read from the file descriptor if more data is needed
     while (remaining > 0) {
@@ -150,21 +123,28 @@ ssize_t buffered_read(buffered_file_t *bf, void *buf, size_t count) {
             perror("Error getting current position in file");
             return -1;
         }
+        if(bf->read_buffer_size < remaining){
+            // Read data from the file descriptor
+            fd_size = read(bf->fd, bf->read_buffer, bf->read_buffer_size);
+            bf->read_buffer_pos = 0;
+            if (fd_size == -1) {
+                perror("Error reading from file");
+                return -1;
+            } else if (fd_size == 0) {// End of file
+                break;
+            }
+        } else {
+            // Read data from the file descriptor
+            fd_size = read(bf->fd, bf->read_buffer, remaining);
+            bf->read_buffer_pos = 0;
+            if (fd_size == -1) {
+                perror("Error reading from file");
+                return -1;
+            } else if (fd_size == 0) {// End of file
 
-        // Read data from the file descriptor
-        size_t fd_size = read(bf->fd, bf->read_buffer, bf->read_buffer_size);
-        bf->read_buffer_pos = 0;
-        if (fd_size == -1) {
-            perror("Error reading from file");
-            return -1;
-        } else if (fd_size == 0) {// End of file
-            // Save the number of characters read
-            read_chars = 0;
-            break;
+                break;
+            }
         }
-
-        // Save the number of characters read
-        read_chars = fd_size;
 
         // Copy data to the read buffer
         to_copy = remaining < fd_size ? remaining : fd_size;
@@ -212,7 +192,7 @@ int buffered_flush(buffered_file_t *bf) {
         }
 
         // If O_PREAPPEND flag is set, handle pre-append logic
-        if (bf->preappend) {
+        if (bf->preappend == 1) {
 
             // get the file size
             off_t file_size = lseek(bf->fd, 0, SEEK_END);
@@ -274,11 +254,11 @@ int buffered_flush(buffered_file_t *bf) {
             }
 
             free(temp_buffer);
-            // Remove the O_PREAPPEND flag after handling
-            bf->preappend = 0;
-            PREAPPEND_WAS_ON = 1;
+           
+            // Remove the O_PREAPPEND flag after handling by put 2 to indicated that was preappend
+            bf->preappend = 2;
         } else {
-            if (PREAPPEND_WAS_ON == 1) {
+            if (bf->preappend == 2) {
                 // Save the position of previous data
                 off_t previous_data_end = lseek(bf->fd, 0, SEEK_CUR);
                 if (previous_data_end == -1) {
@@ -397,135 +377,6 @@ int buffered_close(buffered_file_t *bf) {
     free(bf->write_buffer);
     free(bf->read_buffer);
     free(bf);
-
-    return 0;
-}
-int main() {
-    buffered_file_t *bf = buffered_open("example.txt", O_RDWR | O_CREAT | O_PREAPPEND, 0644);
-    if (!bf) {
-        perror("buffered_open");
-        return 1;
-    }
-
-    const char *text = "hello world\n";
-    if (buffered_write(bf, text, strlen(text)) == -1) {
-        perror("buffered_write");
-        buffered_close(bf);
-        return 1;
-    }
-    const char *text2 = "This is a test.\n";
-    if (buffered_write(bf, text2, strlen(text2)) == -1) {
-        perror("buffered_write");
-        buffered_close(bf);
-        return 1;
-    }
-
-    const char *text3 = "This is a test number 2 .\n";
-    if (buffered_write(bf, text3, strlen(text3)) == -1) {
-        perror("buffered_write");
-        buffered_close(bf);
-        return 1;
-    }
-
-    char buffer2[1024];
-    ssize_t read_bytes2 = buffered_read(bf, buffer2, 10);
-    if (read_bytes2 == -1) {
-        perror("buffered_read");
-        buffered_close(bf);
-        return 1;
-    }
-    printf("Read: %s\n", buffer2);
-    buffered_flush(bf);
-
-    const char *text4 = "This is a test number 3 .\n";
-    if (buffered_write(bf, text4, strlen(text4)) == -1) {
-        perror("buffered_write");
-        buffered_close(bf);
-        return 1;
-    }
-
-    char buffer[1024];
-    ssize_t read_bytes = buffered_read(bf, buffer, 10);
-    if (read_bytes == -1) {
-        perror("buffered_read");
-        buffered_close(bf);
-        return 1;
-    }
-    printf("Read: %s\n", buffer);
-
-    const char *text5 = "Done.\n";
-    if (buffered_write(bf, text5, strlen(text5)) == -1) {
-        perror("buffered_write");
-        buffered_close(bf);
-        return 1;
-    }
-
-    if (buffered_close(bf) == -1) {
-        perror("buffered_close");
-        return 1;
-    }
-
-    // if (buffered_flush(bf) == -1) {
-    //     perror("buffered_flush");
-    //     buffered_close(bf);
-    //     return 1;
-    // }
-
-    // Move the file descriptor to the beginning of the file before reading
-    // if (lseek(bf->fd, 0, SEEK_SET) == -1) {
-    //     perror("lseek set");
-    //     buffered_close(bf);
-    //     return 1;
-    // }
-
-    // const char *text4 = "This is a test number 3 .\n";
-    // if (buffered_write(bf, text4, strlen(text4)) == -1) {
-    //     perror("buffered_write");
-    //     buffered_close(bf);
-    //     return 1;
-    // }
-
-
-   
-
-    // char buffer2[1024];
-    // ssize_t read_bytes2 = buffered_read(bf, buffer2, sizeof(buffer2) - 1);
-    // if (read_bytes2 == -1) {
-    //     perror("buffered_read");
-    //     buffered_close(bf);
-    //     return 1;
-    // }
-    // buffer2[read_bytes2] = '\0';
-    // printf("Read: %s\n", buffer2);
-
-    // if (buffered_close(bf) == -1) {
-    //     perror("buffered_close");
-    //     return 1;
-    // }
-   
-
-    // // Additional read from a new file descriptor
-    // char buffer[1024];
-    // buffered_file_t *bf2 = buffered_open("example1.txt", O_RDONLY);
-    // if (!bf2) {
-    //     perror("buffered_open");
-    //     return 1;
-    // }
-
-    // ssize_t read_bytes = buffered_read(bf2, buffer, sizeof(buffer) - 1);
-    // if (read_bytes == -1) {
-    //     perror("buffered_read");
-    //     buffered_close(bf2);
-    //     return 1;
-    // }
-    // buffer[read_bytes] = '\0';
-    // printf("Read again: %s", buffer);
-
-
-    // if (buffered_close(bf2) == -1) {
-    //     perror("buffered_close");
-    //     return 1;
-    // }
 
     return 0;
 }
