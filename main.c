@@ -3,6 +3,7 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <getopt.h>
+#pragma GCC optimize("O2")
 
 void print_usage(const char *prog_name) {
     fprintf(stderr, "Usage: %s [-l] [-p] <source_directory> <destination_directory>", prog_name);
