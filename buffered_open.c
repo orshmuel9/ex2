@@ -80,6 +80,7 @@ buffered_file_t *buffered_open(const char *pathname, int flags, ...) {
 // Function to write to the buffered file
 ssize_t buffered_write(buffered_file_t *bf, const void *buf, size_t count) {
     size_t remaining_space = bf->write_buffer_size - bf->write_buffer_pos;
+    size_t total_written = 0;
 
     while (count > 0) {
         if (remaining_space == 0) { 
@@ -94,19 +95,20 @@ ssize_t buffered_write(buffered_file_t *bf, const void *buf, size_t count) {
         bf->write_buffer_pos += bytes_to_write;
         buf = (const char *)buf + bytes_to_write; 
         count -= bytes_to_write; 
-        remaining_space -= bytes_to_write; 
+        remaining_space -= bytes_to_write;
+        total_written += bytes_to_write;
     }
-    if(remaining_space == 0) {
+    if (remaining_space == 0) {
         if (buffered_flush(bf) == -1) {
             return -1; 
         }
     }
-    return count;
+    return total_written;
 }
 
 // Function to read from the buffered file
 ssize_t buffered_read(buffered_file_t *bf, void *buf, size_t count) {
-    // flush the write buffer before reading
+    // Flush the write buffer before reading
     if (bf->write_buffer_pos > 0) {
         if (buffered_flush(bf) == -1) {
             return -1; 
@@ -120,7 +122,8 @@ ssize_t buffered_read(buffered_file_t *bf, void *buf, size_t count) {
         char *buffer = buf;
 
         while (remaining > 0) {
-            ssize_t read_bytes = read(bf->fd, buffer, remaining);
+            size_t chunk_size = (remaining < bf->read_buffer_size - bf->read_buffer_pos) ? remaining : bf->read_buffer_size - bf->read_buffer_pos;
+            ssize_t read_bytes = read(bf->fd, buffer, chunk_size);
             if (read_bytes == -1) {
                 perror("read");
                 return -1;
@@ -167,7 +170,6 @@ ssize_t buffered_read(buffered_file_t *bf, void *buf, size_t count) {
         return read_bytes;
     }
 }
-
 
 // Function to flush the buffered file
 int buffered_flush(buffered_file_t *bf) {
@@ -339,92 +341,92 @@ int buffered_close(buffered_file_t *bf) {
 //         return 1;
 //     }
 
-// //     const char *text = "Hello, World TRUNCs!\n";
-// //     if (buffered_write(bf, text, strlen(text)) == -1) {
-// //         perror("buffered_write");
-// //         buffered_close(bf);
-// //         return 1;
-// //     }
+    // const char *text = "Hello, World TRUNCs!\n";
+    // if (buffered_write(bf, text, strlen(text)) == -1) {
+    //     perror("buffered_write");
+    //     buffered_close(bf);
+    //     return 1;
+    // }
 
-// //     if(buffered_flush(bf) == -1) {
-// //         perror("buffered_flush");
-// //         buffered_close(bf);
-// //         return 1;
-// //     }
+    // if(buffered_flush(bf) == -1) {
+    //     perror("buffered_flush");
+    //     buffered_close(bf);
+    //     return 1;
+    // }
 
-//     char buffer[3];
-//     ssize_t read_bytes = buffered_read(bf, buffer, sizeof(buffer));
-//     if (read_bytes == -1) {
-//         perror("buffered_read");
-//         buffered_close(bf);
-//         return 1;
-//     }
-//     //buffer[read_bytes] = '\0';
-//     printf("Read: %s\n", buffer);
-//     printf("Read from buffer: %s\n", bf->read_buffer);
+    // char buffer[3];
+    // ssize_t read_bytes = buffered_read(bf, buffer, sizeof(buffer));
+    // if (read_bytes == -1) {
+    //     perror("buffered_read");
+    //     buffered_close(bf);
+    //     return 1;
+    // }
+    // //buffer[read_bytes] = '\0';
+    // printf("Read: %s\n", buffer);
+    // printf("Read from buffer: %s\n", bf->read_buffer);
 
-//     char buffer2[10];
-//     ssize_t read_bytes2 = buffered_read(bf, buffer2, sizeof(buffer2));
-//     if (read_bytes2 == -1) {
-//         perror("buffered_read");
-//         buffered_close(bf);
-//         return 1;
-//     }
-//     //buffer2[read_bytes2] = '\0';
-//     printf("Read2: %s\n", buffer2);
-//     printf("Read from buffer2: %s\n", bf->read_buffer);
+    // char buffer2[10];
+    // ssize_t read_bytes2 = buffered_read(bf, buffer2, sizeof(buffer2));
+    // if (read_bytes2 == -1) {
+    //     perror("buffered_read");
+    //     buffered_close(bf);
+    //     return 1;
+    // }
+    // //buffer2[read_bytes2] = '\0';
+    // printf("Read2: %s\n", buffer2);
+    // printf("Read from buffer2: %s\n", bf->read_buffer);
 
-//     char buffer3[1000];
-//     ssize_t read_bytes3 = buffered_read(bf, buffer3, sizeof(buffer3));
-//     if (read_bytes3 == -1) {
-//         perror("buffered_read");
-//         buffered_close(bf);
-//         return 1;
-//     }
-//     //buffer3[read_bytes3] = '\0';
-//     printf("Read3: %s\n", buffer3);
-//     printf("Buffer Pos %ld\n" , bf->read_buffer_pos);
-//     printf("Read from buffer3: %s\n", bf->read_buffer);
+    // char buffer3[1000];
+    // ssize_t read_bytes3 = buffered_read(bf, buffer3, sizeof(buffer3));
+    // if (read_bytes3 == -1) {
+    //     perror("buffered_read");
+    //     buffered_close(bf);
+    //     return 1;
+    // }
+    // //buffer3[read_bytes3] = '\0';
+    // printf("Read3: %s\n", buffer3);
+    // printf("Buffer Pos %ld\n" , bf->read_buffer_pos);
+    // printf("Read from buffer3: %s\n", bf->read_buffer);
 
-//     const char *text2 = "This is a test.\n";
-//     if (buffered_write(bf, text2, strlen(text2)) == -1) {
-//         perror("buffered_write");
-//         buffered_close(bf);
-//         return 1;
-//     }
+    // const char *text2 = "This is a test.\n";
+    // if (buffered_write(bf, text2, strlen(text2)) == -1) {
+    //     perror("buffered_write");
+    //     buffered_close(bf);
+    //     return 1;
+    // }
 
-//     const char *text3 = "This is a test number 2 .\n";
-//     if (buffered_write(bf, text3, strlen(text3)) == -1) {
-//         perror("buffered_write");
-//         buffered_close(bf);
-//         return 1;
-//     }
+    // const char *text3 = "This is a test number 2 .\n";
+    // if (buffered_write(bf, text3, strlen(text3)) == -1) {
+    //     perror("buffered_write");
+    //     buffered_close(bf);
+    //     return 1;
+    // }
 
-//     if (buffered_flush(bf) == -1) {
-//         perror("buffered_flush");
-//         buffered_close(bf);
-//         return 1;
-//     }
+    // if (buffered_flush(bf) == -1) {
+    //     perror("buffered_flush");
+    //     buffered_close(bf);
+    //     return 1;
+    // }
 
-//     const char *text4 = "This is a test number 3 .\n";
-//     if (buffered_write(bf, text4, strlen(text4)) == -1) {
-//         perror("buffered_write");
-//         buffered_close(bf);
-//         return 1;
-//     }
+    // const char *text4 = "This is a test number 3 .\n";
+    // if (buffered_write(bf, text4, strlen(text4)) == -1) {
+    //     perror("buffered_write");
+    //     buffered_close(bf);
+    //     return 1;
+    // }
 
-//     if(buffered_flush(bf) == -1) {
-//         perror("buffered_flush");
-//         buffered_close(bf);
-//         return 1;
-//     }
+    // if(buffered_flush(bf) == -1) {
+    //     perror("buffered_flush");
+    //     buffered_close(bf);
+    //     return 1;
+    // }
 
-//     const char *text5 = "This is a test number 4 .\n";
-//     if (buffered_write(bf, text5, strlen(text5)) == -1) {
-//         perror("buffered_write");
-//         buffered_close(bf);
-//         return 1;
-//     }
+    // const char *text5 = "This is a test number 4 .\n";
+    // if (buffered_write(bf, text5, strlen(text5)) == -1) {
+    //     perror("buffered_write");
+    //     buffered_close(bf);
+    //     return 1;
+    // }
 
     //     if (buffered_close(bf) == -1) {
     //     perror("buffered_close");
